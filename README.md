@@ -8,7 +8,7 @@ principal objetivo deste projeto é implementar e analisar um modelo de intelig�
 Este projeto se baseia no seguinte código de referência 
 
 Código-base fornecido: (https://github.com/thalesvalente/teaching/blob/main/artificial-intelligence/exercises/agentes-formiga-code.txt) 
-## 👥 Autores
+# 👥 Autores
 - Maria Vitória
 - Rafael Diniz
 - Adrielle Campelo
