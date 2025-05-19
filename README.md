@@ -15,3 +15,5 @@ Código-base fornecido: (https://github.com/thalesvalente/teaching/blob/main/art
 - Cauan Veloso
 # 👨‍🏫 Orientador
 - Thales Valente
+
+🚀Ferramenta Utilizada: NetLogo🚀
