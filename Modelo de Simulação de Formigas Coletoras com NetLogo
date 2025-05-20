@@ -1,0 +1,306 @@
+; === MODELO DE FORMIGAS COLETORAS COM TIPOS DE COMida, PREDADORES E CLIMA ===
+
+; === RAÇAS ===
+breed [formigas formiga]         ; Define a raça "formigas", singular "formiga"
+breed [predadores predador]     ; Define a raça "predadores", singular "predador"
+
+; === VARIÁVEIS GLOBAIS ===
+globals [
+  food-carriers                  ; Número de formigas carregando comida
+  total-food-collected          ; Total de comida coletada
+  total-acucar                  ; Total de açúcar coletado
+  total-semente                 ; Total de sementes coletadas
+  total-fruta                   ; Total de frutas coletadas
+  clima                         ; Tipo atual de clima (ensolarado, chuvoso, etc.)
+  clima-intensidade             ; Intensidade do clima atual
+  raio-do-ninho                 ; Tamanho atual do raio do ninho
+]
+
+; === VARIÁVEIS DOS PATCHES ===
+patches-own [
+  chemical                      ; Nível de feromônio no patch
+  food                          ; Quantidade de comida presente
+  nest?                         ; Se o patch faz parte do ninho
+  nest-scent                    ; Intensidade do cheiro do ninho
+  food-source-number            ; Identificador da fonte de comida
+  obstaculo?                    ; Se o patch é um obstáculo
+  tipo-de-comida                ; Tipo de comida (açúcar, semente, fruta)
+]
+
+; === VARIÁVEIS DAS FORMIGAS ===
+formigas-own [
+  carregando-comida?            ; Se a formiga está carregando comida
+  tipo-carregado                ; Tipo de comida carregada
+  carga                         ; Quantidade atual de comida carregada
+  capacidade-maxima             ; Capacidade máxima de carga da formiga
+]
+
+; === VARIÁVEIS DOS PREDADORES ===
+predadores-own [
+  fome                          ; Grau de fome do predador (não utilizado diretamente)
+]
+
+; === SETUP ===
+to setup
+  clear-all                     ; Limpa o mundo e reinicia tudo
+  set-default-shape formigas "bug"      ; Define forma das formigas
+  set-default-shape predadores "wolf"   ; Define forma dos predadores
+  set total-food-collected 0   ; Inicializa total de comida
+  set total-acucar 0
+  set total-semente 0
+  set total-fruta 0
+  set raio-do-ninho 5          ; Define o raio inicial do ninho
+
+  create-formigas population [
+    set size 2
+    set color red
+    setxy random-xcor random-ycor     ; Posiciona aleatoriamente
+    set carregando-comida? false
+    set tipo-carregado ""
+    set carga 0
+    set capacidade-maxima 3
+  ]
+
+  create-predadores 1 [
+    set size 2.5
+    set color blue
+    setxy random-xcor random-ycor
+    set fome 0
+  ]
+
+  setup-patches                 ; Inicializa patches com obstáculos, ninho e comida
+
+  set clima one-of ["ensolarado" "chuvoso" "nublado" "ventando"] ; Define clima aleatório
+  set clima-intensidade random-float 1.0                          ; Intensidade aleatória
+
+  reset-ticks                  ; Reinicia o tempo
+  clear-plot                   ; Limpa os gráficos
+end
+
+; === CONFIGURAÇÃO DOS PATCHES ===
+to setup-patches
+  ask patches [
+    set chemical 0
+    set food 0
+    set food-source-number 0
+    set obstaculo? false
+    set tipo-de-comida ""
+  ]
+
+  let obstaculos patches with [(distancexy 0 0) > 7] ; Seleciona patches distantes
+  ask n-of 30 obstaculos [ set obstaculo? true ]     ; Define 30 como obstáculos
+
+  ask patches [
+    setup-nest            ; Configura ninho
+    setup-food            ; Define se tem comida
+    recolor-patch         ; Ajusta cor visual
+  ]
+end
+
+; === NINHO ===
+to setup-nest
+  set nest? (distancexy 0 0) < raio-do-ninho         ; Define se faz parte do ninho
+  ifelse nest? [
+    set nest-scent 200 - distancexy 0 0             ; Cheiro mais forte perto do centro
+  ] [
+    set nest-scent 0
+  ]
+end
+
+; === FONTES DE COMIDA ===
+to setup-food
+  if (distancexy (0.6 * max-pxcor) 0) < 5 [
+    set food-source-number 1
+    set food one-of [1 2]               ; Quantidade aleatória
+    set tipo-de-comida "açúcar"
+  ]
+  if (distancexy (-0.6 * max-pxcor) (-0.6 * max-pycor)) < 5 [
+    set food-source-number 2
+    set food one-of [1 2]
+    set tipo-de-comida "semente"
+  ]
+  if (distancexy (-0.8 * max-pxcor) (0.8 * max-pycor)) < 5 [
+    set food-source-number 3
+    set food one-of [1 2]
+    set tipo-de-comida "fruta"
+  ]
+end
+
+; === COLORAÇÃO DOS PATCHES ===
+to recolor-patch
+  ifelse obstaculo? [
+    set pcolor yellow                ; Obstáculos amarelos
+  ] [
+    ifelse nest? [
+      set pcolor violet             ; Ninho roxo
+    ] [
+      ifelse food > 0 [
+        if food-source-number = 1 [ set pcolor cyan ]
+        if food-source-number = 2 [ set pcolor sky ]
+        if food-source-number = 3 [ set pcolor blue ]
+      ] [
+        set pcolor scale-color green chemical 0.1 5 ; Verde baseado no feromônio
+      ]
+    ]
+  ]
+end
+
+; === EXECUÇÃO PRINCIPAL ===
+to go
+  atualizar-clima                  ; Atualiza o clima eventualmente
+  atualizar-ninho                  ; Expande ninho se necessário
+  set food-carriers count formigas with [carregando-comida?] ; Conta formigas com comida
+
+  ask formigas [
+    if clima = "chuvoso" [
+      if patch-here != patch 0 0 [
+        face patch 0 0
+        fd 1
+      ]
+    ]
+    if clima != "chuvoso" [
+      ifelse not carregando-comida? or carga < capacidade-maxima [
+        look-for-food              ; Procura comida
+      ] [
+        return-to-nest            ; Volta ao ninho
+      ]
+      wiggle                      ; Movimento aleatório
+      fd 1
+    ]
+  ]
+
+  ask predadores [
+    perseguir-formigas            ; Caça formigas próximas
+    rt random 30
+    lt random 30
+    fd 1
+  ]
+
+  diffuse chemical (diffusion-rate / 100)  ; Difusão de feromônio
+
+  ask patches [
+    set chemical chemical * ((100 - evaporation-rate) / 100) ; Evaporação
+    recolor-patch
+  ]
+
+  ; Gráficos de monitoramento
+  set-current-plot "Formigas e Comida"
+  set-current-plot-pen "Formigas com comida"
+  plot food-carriers
+
+  set-current-plot-pen "Total de comida trazida"
+  plot total-food-collected
+
+  set-current-plot "Comida por Tipo"
+  set-current-plot-pen "açúcar"
+  plot total-acucar
+  set-current-plot-pen "semente"
+  plot total-semente
+  set-current-plot-pen "fruta"
+  plot total-fruta
+
+  tick                           ; Avança o tempo
+end
+
+; === CLIMA ===
+to atualizar-clima
+  if random-float 1.0 < 0.01 [
+    set clima one-of ["ensolarado" "chuvoso" "nublado" "ventando"] ; Nova condição
+    set clima-intensidade random-float 1.0
+  ]
+end
+
+; === CRESCIMENTO DO NINHO ===
+to atualizar-ninho
+  let novo-raio (5 + (total-food-collected / 50)) ; Novo tamanho baseado na comida
+  if novo-raio > raio-do-ninho [
+    set raio-do-ninho novo-raio
+    ask patches [ setup-nest recolor-patch ]
+  ]
+end
+
+; === COMPORTAMENTO DAS FORMIGAS ===
+to look-for-food
+  if food > 0 and (not carregando-comida? or carga < capacidade-maxima) [
+    if not carregando-comida? [
+      set tipo-carregado tipo-de-comida
+      set carregando-comida? true
+      set color orange + 2
+    ]
+    if tipo-carregado = tipo-de-comida and carga < capacidade-maxima [
+      set carga carga + 1
+      set food food - 1
+      if carga = capacidade-maxima [ rt 180 ] ; Vira de volta
+      stop
+    ]
+  ]
+  if (chemical >= 0.05) and (chemical < 2) [
+    uphill-chemical               ; Segue o feromônio
+  ]
+end
+
+to return-to-nest
+  if nest? [
+    set total-food-collected total-food-collected + carga
+    if tipo-carregado = "açúcar" [ set total-acucar total-acucar + carga ]
+    if tipo-carregado = "semente" [ set total-semente total-semente + carga ]
+    if tipo-carregado = "fruta" [ set total-fruta total-fruta + carga ]
+    set carga 0
+    set tipo-carregado ""
+    set carregando-comida? false
+    set color red
+    rt 180
+    stop
+  ]
+  set chemical chemical + 60       ; Deixa feromônio no caminho
+  uphill-nest-scent                ; Segue o cheiro do ninho
+end
+
+; === MOVIMENTAÇÃO ===
+to uphill-chemical
+  let scent-ahead chemical-scent-at-angle 0
+  let scent-right chemical-scent-at-angle 45
+  let scent-left chemical-scent-at-angle -45
+
+  if (scent-right > scent-ahead) or (scent-left > scent-ahead) [
+    ifelse scent-right > scent-left [ rt 45 ] [ lt 45 ]
+  ]
+end
+
+to uphill-nest-scent
+  let scent-ahead nest-scent-at-angle 0
+  let scent-right nest-scent-at-angle 45
+  let scent-left nest-scent-at-angle -45
+
+  if (scent-right > scent-ahead) or (scent-left > scent-ahead) [
+    ifelse scent-right > scent-left [ rt 45 ] [ lt 45 ]
+  ]
+end
+
+to wiggle
+  rt random 40
+  lt random 40
+  if not can-move? 1 or [obstaculo?] of patch-ahead 1 [ rt 180 ] ; Evita obstáculos
+end
+
+; === COMPORTAMENTO DOS PREDADORES ===
+to perseguir-formigas
+  let alvo one-of formigas in-radius 2
+  if alvo != nobody [
+    face alvo
+    if distance alvo < 1 [ ask alvo [ die ] ] ; Mata formiga próxima
+  ]
+end
+
+; === FUNÇÕES AUXILIARES ===
+to-report chemical-scent-at-angle [angle]
+  let p patch-right-and-ahead angle 1
+  if p = nobody [ report 0 ]
+  report [chemical] of p
+end
+
+to-report nest-scent-at-angle [angle]
+  let p patch-right-and-ahead angle 1
+  if p = nobody [ report 0 ]
+  report [nest-scent] of p
+end
