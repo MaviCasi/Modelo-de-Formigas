@@ -1,0 +1,548 @@
+; === MODELO DE FORMIGAS COLETORAS COM TIPOS DE COMida, PREDADORES E CLIMA ===
+
+; === RAÇAS ===
+; === Define as raças (tipos de agentes) no modelo: formigas e predadores.
+breed [formigas formiga]
+breed [predadores predador]
+
+; === VARIÁVEIS GLOBAIS ===
+; === Variáveis globais que armazenam informações gerais sobre o estado do modelo.
+globals [
+  total-mortes-por-idade ; Total de formigas que morreram por idade.
+  food-carriers ; Número de formigas carregando comida.
+  total-food-collected ; Total de comida coletada.
+  total-acucar ; Total de açúcar coletado.
+  total-semente ; Total de sementes coletadas.
+  total-fruta ; Total de frutas coletadas.
+  clima ; Clima atual (ex.: primavera, inverno).
+  clima-intensidade ; Intensidade do clima atual.
+  raio-do-ninho ; Raio do ninho das formigas.
+]
+
+; === VARIÁVEIS DOS PATCHES ===
+; === Variáveis associadas aos patches (células do ambiente).
+patches-own [
+  chemical ; Quantidade de feromônio químico no patch.
+  food ; Quantidade de comida presente no patch.
+  nest? ; Indica se o patch faz parte do ninho.
+  nest-scent ; Intensidade do cheiro do ninho no patch.
+  food-source-number ; Número da fonte de comida associada ao patch.
+  obstaculo? ; Indica se o patch é um obstáculo.
+  tipo-de-comida ; Tipo de comida presente no patch (ex.: açúcar, semente, fruta).
+]
+
+; === VARIÁVEIS DAS FORMIGAS ===
+; === Variáveis associadas às formigas.
+formigas-own [
+  age ; Idade da formiga.
+  entregas ; Número de entregas de comida feitas pela formiga.
+  carregando-comida? ; Indica se a formiga está carregando comida.
+  tipo-carregado ; Tipo de comida que a formiga está carregando.
+  carga ; Quantidade de comida que a formiga está carregando.
+  capacidade-maxima ; Capacidade máxima de carga da formiga.
+  papel ; Papel da formiga na colônia (ex.: "operaria", "soldado", "rainha").
+]
+
+; === VARIÁVEIS DOS PREDADORES ===
+; === Variáveis associadas aos predadores.
+predadores-own [
+  fome ; Nível de fome do predador.
+]
+
+; === === CONFIGURAÇÃO INICIAL DO MODELO ===
+; === O procedimento `setup` é responsável por inicializar o ambiente do modelo,
+; === criando os agentes (formigas e predadores), configurando as variáveis globais,
+; === e definindo as condições iniciais, como o clima e o estado dos patches.
+; === Após a criação dos agentes, o método `setup-patches` é chamado para configurar
+; === os patches do ambiente, incluindo obstáculos, ninho e fontes de comida.
+
+to setup
+  clear-all ; Limpa o mundo e reinicia o modelo.
+  set-default-shape formigas "bug" ; Define a forma padrão das formigas.
+  set-default-shape predadores "wolf" ; Define a forma padrão dos predadores.
+  set total-food-collected 0 ; Inicializa o total de comida coletada como 0.
+  set total-mortes-por-idade 0 ; Inicializa o total de mortes por idade como 0.
+  set total-acucar 0 ; Inicializa o total de açúcar coletado como 0.
+  set total-semente 0 ; Inicializa o total de sementes coletadas como 0.
+  set total-fruta 0 ; Inicializa o total de frutas coletadas como 0.
+  set raio-do-ninho 5 ; Define o raio inicial do ninho.
+
+  ; === Cria formigas operárias (vermelhas).
+  create-formigas (population - 5) [
+    set age 0 ; Idade inicial da formiga.
+    set entregas 0 ; Inicializa o número de entregas como 0.
+    set size 2 ; Define o tamanho da formiga.
+    set color red ; Define a cor da formiga como vermelha.
+    setxy random-xcor random-ycor ; Posiciona a formiga em uma posição aleatória.
+    set carregando-comida? false ; Define que a formiga não está carregando comida.
+    set tipo-carregado "" ; Inicializa o tipo de comida carregado como vazio.
+    set carga 0 ; Inicializa a carga como 0.
+    set capacidade-maxima 3 ; Define a capacidade máxima de carga como 3.
+    set papel "operaria" ; Define o papel da formiga como operária.
+  ]
+
+  ; === Cria formigas soldados (verdes).
+  create-formigas 4 [
+    set age 0
+    set entregas 0
+    set size 3.5 ; Define o tamanho maior para soldados.
+    set color green ; Define a cor como verde para soldados.
+    setxy random-xcor random-ycor
+    set carregando-comida? false
+    set tipo-carregado ""
+    set carga 0
+    set capacidade-maxima 0 ; Soldados não carregam comida.
+    set papel "soldado" ; Define o papel como soldado.
+  ]
+
+  ; === Cria a formiga rainha (marrom).
+  create-formigas 1 [
+    set age 0
+    set entregas 0
+    set size 6 ; Define um tamanho maior para a rainha.
+    set color brown ; Define a cor como marrom para a rainha.
+    setxy 0 0 ; Posiciona a rainha no centro do mundo.
+    set carregando-comida? false
+    set tipo-carregado ""
+    set carga 0
+    set capacidade-maxima 0 ; A rainha não carrega comida.
+    set papel "rainha" ; Define o papel como rainha.
+  ]
+
+  ; === Cria predadores (azuis).
+  create-predadores 2 [
+    set size 4.5 ; Define o tamanho dos predadores.
+    set color blue ; Define a cor como azul para predadores.
+    setxy random-xcor random-ycor ; Posiciona os predadores em locais aleatórios.
+    set fome 0 ; Inicializa o nível de fome como 0.
+  ]
+
+; === Este procedimento inicializa variáveis dos patches, define obstáculos,
+setup-patches
+
+; === Define o clima inicial do modelo, escolhendo aleatoriamente entre as estações disponíveis.
+set clima one-of ["primavera" "outono" "inverno"]
+
+; === Define a intensidade inicial do clima como um valor aleatório pequeno.
+set clima-intensidade random-float 0.01
+
+; === Reinicia o contador de ticks e limpa os gráficos.
+reset-ticks
+clear-plot
+
+; === Configura o gráfico para monitorar mortes por envelhecimento.
+set-current-plot "Mortes por Envelhecimento"
+set-current-plot-pen "Mortes"
+plot total-mortes-por-idade
+end
+
+; === Configura os patches do ambiente, inicializando variáveis e definindo obstáculos, ninho e fontes de comida.
+to setup-patches
+  ask patches [
+    set chemical 0 ; Inicializa a quantidade de feromônio químico no patch como 0.
+    set food 0 ; Inicializa a quantidade de comida no patch como 0.
+    set food-source-number 0 ; Inicializa o número da fonte de comida como 0.
+    set obstaculo? false ; Define que o patch não é um obstáculo inicialmente.
+    set tipo-de-comida "" ; Inicializa o tipo de comida como vazio.
+  ]
+
+  ; === Define patches como obstáculos se estiverem fora de um raio específico.
+  let obstaculos patches with [(distancexy 0 0) > 7]
+  ask n-of 30 obstaculos [
+    set obstaculo? true ; Marca o patch como um obstáculo.
+  ]
+
+  ; === Configura o ninho, as fontes de comida e as cores dos patches.
+  ask patches [
+    setup-nest ; Configura os patches que fazem parte do ninho.
+    setup-food ; Configura os patches que contêm comida.
+    recolor-patch ; Atualiza a cor do patch com base em suas propriedades.
+  ]
+end
+
+; === Configura os patches que fazem parte do ninho.
+to setup-nest
+  ; === Verifica se o patch está dentro do raio do ninho.
+  set nest? (distancexy 0 0) < raio-do-ninho
+  ifelse nest? [
+    ; === Define a intensidade do cheiro do ninho com base na distância do centro.
+    set nest-scent 200 - distancexy 0 0
+  ] [
+    ; === Caso contrário, define o cheiro do ninho como 0.
+    set nest-scent 0
+  ]
+end
+
+; === Configura as fontes de comida no ambiente.
+to setup-food 
+  ; === Define a posição e o tipo de comida para cada fonte.
+  if (distancexy (0.6 * max-pxcor) 0) < 5 [
+    set food-source-number 1 ; Fonte de comida 1.
+    set food one-of [1 2] ; Define a quantidade inicial de comida.
+    set tipo-de-comida "açúcar" ; Define o tipo de comida como açúcar.
+  ]
+  if (distancexy (-0.6 * max-pxcor) (-0.6 * max-pycor)) < 5 [
+    set food-source-number 2 ; Fonte de comida 2.
+    set food one-of [1 2]
+    set tipo-de-comida "semente" ; Define o tipo de comida como semente.
+  ]
+  if (distancexy (-0.8 * max-pxcor) (0.8 * max-pycor)) < 5 [
+    set food-source-number 3 ; Fonte de comida 3.
+    set food one-of [1 2]
+    set tipo-de-comida "fruta" ; Define o tipo de comida como fruta.
+  ]
+end
+
+to recolor-patch
+  ; === Atualiza a cor dos patches com base em suas propriedades.
+  ifelse obstaculo? [
+    set pcolor yellow ; Obstáculos são amarelos.
+  ] [
+    ifelse nest? [
+      set pcolor violet ; O ninho é violeta.
+    ] [
+      ifelse food > 0 [
+        ; === Define a cor com base na fonte de comida.
+        if food-source-number = 1 [ set pcolor cyan ] ; Açúcar.
+        if food-source-number = 2 [ set pcolor sky ] ; Semente.
+        if food-source-number = 3 [ set pcolor blue ] ; Fruta.
+      ] [
+        ; === Caso contrário, escala a cor verde com base no nível de feromônio químico.
+        set pcolor scale-color green chemical 0.1 5
+      ]
+    ]
+  ]
+end
+
+; === EXECUÇÃO PRINCIPAL ===
+; === === INÍCIO DO PROCEDIMENTO GO ===
+; === O procedimento `go` é o ciclo principal do modelo. Ele controla o comportamento
+; === das formigas, predadores e patches, além de atualizar o clima, gráficos e feromônios.
+; === Este procedimento é chamado repetidamente para simular a dinâmica do ambiente.
+
+to go
+  atualizar-clima ; Atualiza o clima do ambiente.
+  atualizar-ninho ; Atualiza o tamanho do ninho com base na comida coletada.
+  set food-carriers count formigas with [carregando-comida?] ; Conta o número de formigas carregando comida.
+
+  ask formigas [
+    if papel != "rainha" [
+      set age age + 1 ; Incrementa a idade das formigas que não são rainhas.
+      if age > 5000 and papel != "soldado" [ ; Remove formigas velhas, exceto soldados.
+        set total-mortes-por-idade total-mortes-por-idade + 1 ; Incrementa o contador de mortes por idade.
+        die ; Remove a formiga do modelo.
+      ]
+    ]
+
+    if papel = "operaria" [ ; Comportamento das formigas operárias.
+      if clima = "inverno" [ ; Durante o inverno, as operárias retornam ao ninho.
+        if patch-here != patch 0 0 [
+          face patch 0 0 ; Direciona para o ninho.
+          fd 1 ; Move para frente.
+        ]
+      ]
+
+      if clima != "inverno" [ ; Fora do inverno, as operárias buscam comida ou retornam ao ninho.
+        ifelse not carregando-comida? or carga < capacidade-maxima [
+          look-for-food ; Procura por comida.
+        ] [
+          return-to-nest ; Retorna ao ninho.
+        ]
+        wiggle ; Movimenta-se aleatoriamente.
+        fd 1 ; Move para frente.
+      ]
+    ]
+
+    if papel = "soldado" [ ; Comportamento dos soldados.
+      patrulhar ; Patrulha o ambiente.
+    ]
+
+    if papel = "rainha" [ ; Comportamento da rainha.
+      gerar-operaria ; Gera novas operárias.
+    ]
+  ]
+
+  ask predadores [ ; Comportamento dos predadores.
+    perseguir-formigas ; Persegue formigas próximas.
+    rt random 30 ; Gira aleatoriamente para a direita.
+    lt random 30 ; Gira aleatoriamente para a esquerda.
+    fd 1 ; Move para frente.
+  ]
+
+  diffuse chemical (diffusion-rate / 100) ; Difunde o feromônio químico pelo ambiente.
+
+  ask patches [
+    set chemical chemical * ((100 - evaporation-rate) / 100) ; Evapora o feromônio químico.
+    recolor-patch ; Atualiza a cor do patch com base em suas propriedades.
+  ]
+
+  ; Atualiza os gráficos.
+  set-current-plot "Formigas e Comida"
+  set-current-plot-pen "Formigas com comida"
+  plot food-carriers ; Plota o número de formigas carregando comida.
+
+  set-current-plot-pen "Total de comida trazida"
+  plot total-food-collected ; Plota o total de comida coletada.
+
+  set-current-plot "Comida por Tipo"
+  set-current-plot-pen "açúcar"
+  plot total-acucar ; Plota o total de açúcar coletado.
+  set-current-plot-pen "semente"
+  plot total-semente ; Plota o total de sementes coletadas.
+  set-current-plot-pen "fruta"
+  plot total-fruta ; Plota o total de frutas coletadas.
+
+  regenerar-comida ; Regenera comida no ambiente.
+  tick ; Incrementa o contador de ticks.
+end
+
+; === CLIMA ===
+; === === ATUALIZAÇÃO DO CLIMA ===
+; === O procedimento `atualizar-clima` é responsável por alterar o clima do ambiente
+; === com uma pequena probabilidade a cada tick. Ele também ajusta a intensidade do clima,
+; === que pode influenciar o comportamento das formigas e predadores.
+
+to atualizar-clima
+  if random-float 1.0 < 0.01 [ ; Pequena chance de mudar o clima.
+    set clima one-of ["primavera" "outono" "inverno"] ; Define um novo clima aleatório.
+    set clima-intensidade random-float 1.0 ; Define uma nova intensidade aleatória para o clima.
+  ]
+end
+
+; === === CRESCIMENTO DO NINHO ===
+; === O procedimento `atualizar-ninho` é responsável por ajustar o tamanho do ninho
+; === com base na quantidade de comida coletada. Ele expande o raio do ninho e
+; === reconfigura os patches para refletir as mudanças.
+
+to atualizar-ninho
+  let novo-raio (5 + (total-food-collected / 50)) ; Calcula o novo raio do ninho com base na comida coletada.
+  if novo-raio > raio-do-ninho [ ; Verifica se o raio do ninho deve ser expandido.
+    set raio-do-ninho novo-raio ; Atualiza o raio do ninho.
+    ask patches [ setup-nest recolor-patch ] ; Reconfigura os patches do ninho e atualiza suas cores.
+  ]
+end
+
+; === COMPORTAMENTO DAS FORMIGAS ===
+; === === BUSCAR COMIDA ===
+; === O procedimento `look-for-food` define o comportamento das formigas ao procurar comida.
+; === Ele verifica se há comida disponível no patch atual e se a formiga pode carregar mais.
+; === Caso encontre comida, a formiga coleta e ajusta suas propriedades para indicar que está carregando.
+
+to look-for-food
+  if food > 0 and (not carregando-comida? or carga < capacidade-maxima) [ ; Verifica se há comida disponível e se a formiga pode carregar.
+    if not carregando-comida? [ ; Se a formiga não está carregando comida.
+      set tipo-carregado tipo-de-comida ; Define o tipo de comida que está sendo carregado.
+      set carregando-comida? true ; Marca que a formiga está carregando comida.
+      set color orange + 2 ; Altera a cor da formiga para indicar que está carregando comida.
+    ]
+    if tipo-carregado = tipo-de-comida and carga < capacidade-maxima [ ; Verifica se o tipo de comida corresponde e se há capacidade.
+      set carga carga + 1 ; Incrementa a carga da formiga.
+      set food food - 1 ; Reduz a quantidade de comida no patch.
+      if carga = capacidade-maxima [ ; Se a capacidade máxima foi atingida.
+        rt 180 ; A formiga vira para retornar ao ninho.
+      ]
+      stop ; Interrompe o comportamento atual.
+    ]
+  ]
+  if (chemical >= 0.05) and (chemical < 2) [ ; Se há feromônio químico no patch.
+    uphill-chemical ; Move em direção ao feromônio.
+  ]
+end
+
+; === === RETORNAR AO NINHO ===
+; === O procedimento `return-to-nest` define o comportamento das formigas ao retornar ao ninho.
+; === Ele verifica se a formiga está no ninho, atualiza os totais de comida coletada,
+; === reseta as propriedades da formiga e adiciona feromônio químico ao patch.
+
+to return-to-nest
+  if nest? [ ; Verifica se a formiga está no ninho.
+    set total-food-collected total-food-collected + carga ; Adiciona a carga ao total de comida coletada.
+
+    if tipo-carregado = "açúcar" [ set total-acucar total-acucar + carga ] ; Atualiza o total de açúcar coletado.
+    if tipo-carregado = "semente" [ set total-semente total-semente + carga ] ; Atualiza o total de sementes coletadas.
+    if tipo-carregado = "fruta" [ set total-fruta total-fruta + carga ] ; Atualiza o total de frutas coletadas.
+
+    set carga 0 ; Reseta a carga da formiga.
+    set tipo-carregado "" ; Reseta o tipo de comida carregado.
+    set carregando-comida? false ; Marca que a formiga não está mais carregando comida.
+    set color red ; Restaura a cor original da formiga.
+    rt 180 ; A formiga vira para sair do ninho.
+    stop ; Interrompe o comportamento atual.
+  ]
+  set chemical chemical + 60 ; Adiciona feromônio químico ao patch.
+  uphill-nest-scent ; Move em direção ao cheiro do ninho.
+end
+
+; === MOVIMENTAÇÃO ===
+; === === SEGUIR FEROMÔNIO ===
+; === O procedimento `uphill-chemical` permite que as formigas sigam a trilha de feromônios,
+; === ajustando sua direção com base na concentração de feromônios à frente, à direita e à esquerda.
+
+to uphill-chemical
+  let scent-ahead chemical-scent-at-angle 0 ; Obtém o nível de feromônio à frente.
+  let scent-right chemical-scent-at-angle 45 ; Obtém o nível de feromônio à direita.
+  let scent-left chemical-scent-at-angle -45 ; Obtém o nível de feromônio à esquerda.
+
+  if (scent-right > scent-ahead) or (scent-left > scent-ahead) [ ; Verifica se há mais feromônio à direita ou à esquerda.
+    ifelse scent-right > scent-left [ ; Se o feromônio à direita for maior.
+      rt 45 ; Vira 45 graus para a direita.
+    ] [
+      lt 45 ; Caso contrário, vira 45 graus para a esquerda.
+    ]
+  ]
+end
+
+; === === SEGUIR CHEIRO DO NINHO ===
+; === O procedimento `uphill-nest-scent` permite que as formigas se movam em direção ao ninho,
+; === ajustando sua direção com base na intensidade do cheiro do ninho à frente.
+
+to uphill-nest-scent
+  let scent-ahead nest-scent-at-angle 0 ; Obtém o nível de cheiro do ninho à frente.
+end
+
+; === === MOVIMENTAÇÃO ALEATÓRIA ===
+; === O procedimento `wiggle` permite que as formigas se movam de forma aleatória,
+; === girando para a direita ou esquerda em ângulos aleatórios e verificando obstáculos à frente.
+
+to wiggle
+  rt random 40 ; Gira aleatoriamente até 40 graus para a direita.
+  lt random 40 ; Gira aleatoriamente até 40 graus para a esquerda.
+  if not can-move? 1 or [obstaculo?] of patch-ahead 1 [ ; Verifica se há um obstáculo à frente.
+    rt 180 ; Se houver, vira 180 graus.
+  ]
+end
+
+; === === PATRULHAR ===
+; === O procedimento `patrulhar` define o comportamento dos soldados ao proteger o ninho.
+; === Eles se movem aleatoriamente dentro do ninho e atacam predadores próximos.
+
+to patrulhar
+  if nest? [ ; Verifica se está no ninho.
+    rt random 30 ; Gira aleatoriamente até 30 graus para a direita.
+    lt random 30 ; Gira aleatoriamente até 30 graus para a esquerda.
+    fd 1 ; Move para frente.
+    let inimigo one-of predadores in-radius 2 with [patch-here = patch 0 0 or [nest?] of patch-here] ; Procura inimigos próximos.
+    if inimigo != nobody [ ; Se encontrar um inimigo.
+      face inimigo ; Direciona-se para o inimigo.
+      if distance inimigo < 1 [ ; Se estiver próximo o suficiente.
+        ask inimigo [ die ] ; Remove o inimigo.
+      ]
+    ]
+  ]
+
+  if not nest? [ ; Se não estiver no ninho.
+    face patch 0 0 ; Direciona-se para o ninho.
+    fd 1 ; Move para frente.
+  ]
+end
+
+; === === GERAR OPERÁRIA ===
+; === O procedimento `gerar-operaria` permite que a rainha crie novas formigas operárias.
+; === Ele verifica se há comida suficiente no ninho e uma chance aleatória antes de gerar uma nova operária.
+; === A nova formiga é inicializada com suas propriedades padrão e posicionada no centro do ninho.
+
+to gerar-operaria
+  if nest? and total-food-collected > 10 and random-float 1.0 < 0.1 [ ; Verifica se está no ninho, há comida suficiente e uma chance aleatória.
+    hatch 1 [ ; Cria uma nova formiga operária.
+      set papel "operaria" ; Define o papel como operária.
+      set shape "bug" ; Define a forma da formiga.
+      set color red ; Define a cor como vermelha.
+      set carregando-comida? false ; Inicializa como não carregando comida.
+      set tipo-carregado "" ; Inicializa o tipo de comida como vazio.
+      set carga 0 ; Inicializa a carga como 0.
+      set capacidade-maxima 3 ; Define a capacidade máxima de carga como 3.
+      set size 2 ; Define o tamanho da formiga.
+      setxy 0 0 ; Posiciona a formiga no centro do ninho.
+    ]
+    set total-food-collected total-food-collected - 5 ; Reduz a comida coletada ao criar uma nova operária.
+  ]
+end
+
+; === === PERSEGUIR FORMIGAS ===
+; === O procedimento `perseguir-formigas` define o comportamento dos predadores ao perseguir formigas.
+; === Ele verifica se o predador está no ninho ou em condições climáticas desfavoráveis, 
+; === e, caso contrário, seleciona uma formiga próxima como alvo para persegui-la e eliminá-la.
+
+to perseguir-formigas ; Define o comportamento dos predadores ao perseguir formigas.
+  if nest? [ ; Verifica se o predador está no ninho.
+    rt 180 ; Vira 180 graus.
+    fd 1 ; Move para frente.
+    stop ; Interrompe o comportamento.
+  ]
+
+  if clima = "chuvoso" and [nest?] of patch-here [ ; Verifica se está chovendo e o predador está no ninho.
+    rt 180 ; Vira 180 graus.
+    fd 1 ; Move para frente.
+    stop ; Interrompe o comportamento.
+  ]
+  let alvo one-of formigas in-radius 2 ; Seleciona uma formiga próxima como alvo.
+  if alvo != nobody [ ; Verifica se há um alvo.
+    face alvo ; Direciona-se para o alvo.
+    if distance alvo < 1 [ ; Verifica se está próximo o suficiente.
+      ask alvo [ die ] ; Remove a formiga.
+    ]
+  ]
+end
+
+; === === INTENSIDADE DO CHEIRO DO NINHO ===
+; === O procedimento `nest-scent-at-angle` retorna a intensidade do cheiro do ninho
+; === em um patch localizado em um ângulo específico à frente da formiga.
+
+to-report nest-scent-at-angle [angle]
+  let p patch-right-and-ahead angle 1 ; Obtém o patch à frente em um ângulo específico.
+  if p = nobody [ report 0 ] ; Retorna 0 se não houver patch.
+  report [nest-scent] of p ; Retorna a intensidade do cheiro do ninho no patch.
+end
+
+; === === INTENSIDADE DO FEROMÔNIO ===
+; === O procedimento `chemical-scent-at-angle` retorna a quantidade de feromônio químico
+; === em um patch localizado em um ângulo específico à frente da formiga.
+
+to-report chemical-scent-at-angle [angle]
+  let p patch-right-and-ahead angle 1 ; Obtém o patch à frente em um ângulo específico.
+  if p = nobody [ report 0 ] ; Retorna 0 se não houver patch.
+  report [chemical] of p ; Retorna a quantidade de feromônio no patch.
+end
+
+
+
+; === ADICIONAR PREDADOR ===
+
+to adicionar-predador
+  create-predadores 1 [ ; Cria um novo predador.
+    set size 5.0 ; Define o tamanho do predador.
+    set color blue ; Define a cor do predador como azul.
+    setxy random-xcor random-ycor ; Posiciona o predador em uma posição aleatória.
+    set fome 0 ; Inicializa o nível de fome do predador como 0.
+  ]
+end
+
+; === === REGENERAÇÃO DE COMIDA ===
+; === O procedimento `regenerar-comida` é responsável por regenerar comida em patches vazios.
+; === Ele verifica se o clima não é inverno e, com uma pequena probabilidade, adiciona comida
+; === a patches que não são obstáculos nem parte do ninho.
+
+to regenerar-comida
+  if clima != "inverno" [ ; Verifica se o clima não é inverno.
+    ask patches with [food = 0 and not obstaculo? and not nest?] [ ; Seleciona patches sem comida, que não são obstáculos ou parte do ninho.
+      if random-float 1.0 < 0.0001 [ ; Pequena chance de regenerar comida.
+        set food one-of [1 2] ; Define a quantidade de comida regenerada.
+        set tipo-de-comida one-of ["açúcar" "semente" "fruta"] ; Define o tipo de comida regenerada.
+        set food-source-number one-of [1 2 3] ; Define o número da fonte de comida.
+      ]
+    ]
+  ]
+end
+
+; === === AUMENTAR OBSTÁCULOS ===
+; === O procedimento `aumentar-obstaculos` adiciona novos obstáculos ao ambiente.
+; === Ele seleciona patches que não são obstáculos nem parte do ninho e os transforma em obstáculos,
+; === atualizando suas propriedades e cores.
+
+to aumentar-obstaculos
+  let novos-obstaculos patches with [not obstaculo? and not nest?] ; Seleciona patches que não são obstáculos nem parte do ninho.
+  ask n-of 10 novos-obstaculos [ ; Seleciona 10 patches aleatórios para se tornarem obstáculos.
+    set obstaculo? true ; Marca o patch como um obstáculo.
+    recolor-patch ; Atualiza a cor do patch para refletir a mudança.
+  ]
+end
